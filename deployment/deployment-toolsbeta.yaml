@@ -1,0 +1,62 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jobs-emailer
+  namespace: jobs-emailer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jobs-emailer-psp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: default
+subjects:
+- kind: ServiceAccount
+  name: jobs-emailer
+  namespace: jobs-emailer
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobs-emailer-configmap
+  namespace: jobs-emailer
+data:
+  "task_compose_emails_loop_sleep": "300"
+  "task_send_emails_loop_sleep": "1"
+  "task_send_emails_max": "2"
+  "task_watch_pods_timeout": "60"
+  "task_read_configmap_sleep": "10"
+  "email_to_domain": "toolsbeta.wmflabs.org"
+  "email_to_prefix": "toolsbeta"
+  "email_from_addr": "root@toolforge.org"
+  "smtp_server_fqdn": "mail.toolforge.org"
+  "smtp_server_port": "465"
+  "send_emails_for_real": "no"
+  "debug": "yes"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobs-emailer
+  namespace: jobs-emailer
+  labels:
+    name: jobs-emailer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: jobs-emailer
+  template:
+    metadata:
+      labels:
+        name: jobs-emailer
+    spec:
+      serviceAccountName: jobs-emailer
+      containers:
+        - name: emailer
+          image: docker-registry.tools.wmflabs.org/toolforge-jobs-framework-emailer:latest
+          imagePullPolicy: Always
+---

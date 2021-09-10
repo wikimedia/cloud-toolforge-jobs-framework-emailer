@@ -1,0 +1,2 @@
+asyncio
+kubernetes==18.20.0
