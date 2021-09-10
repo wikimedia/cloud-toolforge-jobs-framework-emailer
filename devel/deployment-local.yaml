@@ -1,31 +1,12 @@
 ---
 apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: jobs-emailer
-  namespace: jobs-api
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: jobs-emailer-psp
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: privileged-psp
-subjects:
-- kind: ServiceAccount
-  name: jobs-emailer
-  namespace: jobs-api
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: jobs-framework-emailer-configmap
-  namespace: jobs-api
+  name: jobs-emailer-configmap
+  namespace: jobs-emailer
 data:
-  "task_compose_emails_loop_sleep": "300"
-  "task_send_emails_loop_sleep": "1"
+  "task_compose_emails_loop_sleep": "30"
+  "task_send_emails_loop_sleep": "10"
   "task_send_emails_max": "2"
   "task_watch_pods_timeout": "60"
   "task_read_configmap_sleep": "10"
@@ -41,7 +22,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: jobs-emailer
-  namespace: jobs-api
+  namespace: jobs-emailer
   labels:
     name: jobs-emailer
 spec:
