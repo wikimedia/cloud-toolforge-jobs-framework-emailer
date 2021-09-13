@@ -99,9 +99,7 @@ def send_email(to_addr: str, subject: str, body: str):
         return
 
     try:
-        logging.info(
-            f"Sending email FROM: {from_addr} TO: {to_addr} via {server}:{port}"
-        )
+        logging.info(f"Sending email FROM: {from_addr} TO: {to_addr} via {server}:{port}")
         logging.info(f"SUBJECT: {subject}")
         logging.info(f"BODY: {body}")
         if CFG_DICT["send_emails_fo_real"] == "yes":
@@ -156,21 +154,15 @@ def compose_email(user: str, jobs: dict):
             body += f"  -- {event}\n"
 
     body += "\n\n"
-    body += (
-        "If you requested 'filelog' for any of the jobs mentioned above, you may find "
-    )
+    body += "If you requested 'filelog' for any of the jobs mentioned above, you may find "
     body += "additional information about what happened in the associated log files. "
     body += "Check them from Toolforge bastions as usual.\n"
     body += "\n"
     body += "You are receiving this email because:\n"
-    body += (
-        " 1) when the job was created, it was requested to send email notfications\n"
-    )
+    body += "1) when the job was created, it was requested to send email notfications\n"
     body += " 2) you are listed as tool maintainer for this tool, with your email associated\n"
     body += "\n"
-    body += (
-        "Find help and more information in wikitech: https://wikitech.wikimedia.org/\n"
-    )
+    body += "Find help and more information in wikitech: https://wikitech.wikimedia.org/\n"
     body += "\n"
     body += "Thanks for your contributions to the wikimedia movement.\n"
 
@@ -193,9 +185,7 @@ async def task_compose_emails(emailevents: dict, emailq: Queue):
         new = after - before
 
         if new > 0:
-            logging.info(
-                f"{new} new pending emails in the queue, new total queue size: {after}"
-            )
+            logging.info(f"{new} new pending emails in the queue, new total queue size: {after}")
 
         await asyncio.sleep(int(CFG_DICT["task_compose_emails_loop_sleep"]))
 
@@ -292,9 +282,7 @@ async def task_watch_pods(emailevents: dict):
 
     # prepopulating resource version so the initial stream doesn't show us events since the
     # beginning of the history
-    last_seen_version = corev1api.list_pod_for_all_namespaces(
-        limit=1
-    ).metadata.resource_version
+    last_seen_version = corev1api.list_pod_for_all_namespaces(limit=1).metadata.resource_version
 
     # this outer loop is in theory not neccesary. But we are using a timeout in the stream watch
     # because if no events happen (unlikely in a real toolforge) then the call will block waiting
@@ -322,9 +310,7 @@ async def task_watch_pods(emailevents: dict):
 def reconfigure(configmap: dict):
     for key in configmap.data:
         if key not in CFG_DICT:
-            logging.warning(
-                f"ignoring unknown config key '{key}' (doesn't have a previous value)"
-            )
+            logging.warning(f"ignoring unknown config key '{key}' (doesn't have a previous value)")
             continue
 
         CFG_DICT[key] = configmap.data[key]
@@ -362,9 +348,7 @@ async def task_read_configmap():
 
 def reconfigure_logging():
     logging_format = "%(asctime)s %(levelname)s: %(message)s"
-    logging.basicConfig(
-        format=logging_format, stream=sys.stdout, datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    logging.basicConfig(format=logging_format, stream=sys.stdout, datefmt="%Y-%m-%d %H:%M:%S")
 
     logging_level = logging.DEBUG
     if CFG_DICT["debug"] != "yes":
