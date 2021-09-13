@@ -190,6 +190,33 @@ async def task_compose_emails(emailevents: dict, emailq: Queue):
         await asyncio.sleep(int(CFG_DICT["task_compose_emails_loop_sleep"]))
 
 
+def running_generate_msg(emailevents: dict, state: client.V1ContainerStateRunning):
+    eventmsg = f"It was started at {state.started_at}."
+    return eventmsg
+
+
+def terminated_generate_msg(emailevents: dict, state: client.V1ContainerStateTerminated):
+    eventmsg = f"It was created at {state.started_at}. "
+
+    finished_at = state.finished_at
+    if finished_at is not None:
+        eventmsg += f"The pod eventually finished at {finished_at}. "
+
+    exit_code = state.exit_code
+    if exit_code is not None:
+        eventmsg += f"The exit code was {exit_code}. "
+
+    reason = state.reason
+    if reason is not None:
+        eventmsg += f"The reason was '{reason}'. "
+
+    message = state.message
+    if message is not None:
+        eventmsg += f"With associated message '{message}'. "
+
+    return eventmsg
+
+
 def process_event(emailevents: dict, event: dict):
     podname = event["object"].metadata.name
     namespace = event["object"].metadata.namespace
@@ -199,10 +226,6 @@ def process_event(emailevents: dict, event: dict):
     username = labels["app.kubernetes.io/created-by"]
     jobname = labels["app.kubernetes.io/name"]
 
-    logging.info(
-        f"caching event for user '{username}' in job '{jobname}', pod event '{namespace}/{podname}'"
-    )
-
     if emailevents.get(username) is None:
         emailevents[username] = dict()
 
@@ -211,21 +234,43 @@ def process_event(emailevents: dict, event: dict):
 
     statuses = event["object"].status.container_statuses
     containerstatus = statuses[0]
-    restartcount = containerstatus.restart_count
 
-    containerstate = containerstatus.state.terminated
-    started_at = containerstate.started_at
-    finished_at = containerstate.finished_at
-    exit_code = containerstate.exit_code
-    message = containerstate.message
-    reason = containerstate.reason
+    eventmsg = f"Event for pod '{podname}'. "
 
-    emailmsg = f"A pod named '{podname}' was created at {started_at}. "
-    emailmsg += f"It was restarted {restartcount} times. "
-    emailmsg += f"It finished at {finished_at} with exit code {exit_code}. "
-    emailmsg += f"The reason was '{reason}' with message '{message}'."
+    # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1ContainerState.md
+    running_state = containerstatus.state.running
+    terminated_state = containerstatus.state.terminated
 
-    emailevents[username][jobname].append(emailmsg)
+    if running_state is not None:
+        eventmsg += running_generate_msg(emailevents, running_state)
+    elif terminated_state is not None:
+        eventmsg += terminated_generate_msg(emailevents, terminated_state)
+    else:
+        eventmsg += "Unknown container state."
+
+    emailevents[username][jobname].append(eventmsg)
+    logging.info(
+        f"caching event for user '{username}' in job '{jobname}', pod event '{namespace}/{podname}'"
+    )
+    logging.debug(f"{eventmsg}")
+
+
+def user_requested_notifications_for_this(event: dict, emails: str):
+    if emails == "none":
+        return False
+
+    if emails == "all":
+        return True
+
+    phase = event["object"].status.phase
+    if emails == "onfinish" and phase in ["Succeeded", "Failed"]:
+        return True
+
+    if emails == "onfailure" and phase == "Failed":
+        return True
+
+    # otherwise, we don't know, default to ignore
+    return False
 
 
 def pod_event_is_relevant(event: dict):
@@ -268,8 +313,13 @@ def pod_event_is_relevant(event: dict):
 
     phase = event["object"].status.phase
     # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
-    if phase not in ["Succeeded", "Failed"]:
+    if phase not in ["Running", "Succeeded", "Failed"]:
         logging.debug(f"ignoring event: pod phase not relevant: {phase}")
+        return False
+
+    emails = event["object"].metadata.labels.get("jobs.toolforge.org/emails", "none")
+    if not user_requested_notifications_for_this(event, emails):
+        logging.debug(f"ignoring event: per user request, label set to '{emails}'")
         return False
 
     logging.debug("event seems relevant")
