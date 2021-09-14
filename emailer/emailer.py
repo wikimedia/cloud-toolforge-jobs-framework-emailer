@@ -160,12 +160,12 @@ def compose_email(user: str, jobs: dict):
     body += "Check them from Toolforge bastions as usual.\n"
     body += "\n"
     body += "You are receiving this email because:\n"
-    body += "1) when the job was created, it was requested to send email notfications\n"
-    body += " 2) you are listed as tool maintainer for this tool, with your email associated\n"
+    body += " 1) when the job was created, it was requested to send email notfications\n"
+    body += " 2) you are listed as tool maintainer for this tool\n"
     body += "\n"
     body += "Find help and more information in wikitech: https://wikitech.wikimedia.org/\n"
     body += "\n"
-    body += "Thanks for your contributions to the wikimedia movement.\n"
+    body += "Thanks for your contributions to the Wikimedia movement.\n"
 
     # TODO: run the extra mile and include the last few log lines in the email?
 
