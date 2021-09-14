@@ -61,7 +61,7 @@ data:
   "email_to_prefix": "toolsbeta"
   "email_from_addr": "root@toolforge.org"
   "smtp_server_fqdn": "mail.toolsbeta.wmflabs.org"
-  "smtp_server_port": "465"
+  "smtp_server_port": "25"
   "send_emails_for_real": "yes"
   "debug": "no"
 ---
