@@ -92,6 +92,14 @@ def send_email(to_addr: str, subject: str, body: str):
     server = CFG_DICT["smtp_server_fqdn"]
     port = CFG_DICT["smtp_server_port"]
 
+    logging.info(f"Sending email FROM: {from_addr} TO: {to_addr} via {server}:{port}")
+    logging.debug(f"SUBJECT: {subject}")
+    logging.debug(f"BODY: {body}")
+
+    if CFG_DICT["send_emails_for_real"] != "yes":
+        logging.info("not sending email for real")
+        return
+
     try:
         smtp = smtplib.SMTP_SSL(server, port)
     except Exception as e:
@@ -99,20 +107,14 @@ def send_email(to_addr: str, subject: str, body: str):
         return
 
     try:
-        logging.info(f"Sending email FROM: {from_addr} TO: {to_addr} via {server}:{port}")
-        logging.info(f"SUBJECT: {subject}")
-        logging.info(f"BODY: {body}")
-        if CFG_DICT["send_emails_fo_real"] == "yes":
-            smtp.sendmail(from_addr, to_addr, f"Subject:{subject}\n\n{body}")
-        else:
-            logging.info("not sending email for real")
+        smtp.sendmail(from_addr, to_addr, f"Subject:{subject}\n\n{body}")
     except Exception as e:
         smtp.close()
         logging.error(f"unable to send email to {to_addr} via {server}:{port}: {e}")
         return
 
     smtp.close()
-    logging.debug("sent email to {to_addr} via {server}:{port}!")
+    logging.debug(f"sent email to {to_addr} via {server}:{port}!")
 
 
 async def task_send_emails(emailq: Queue):
@@ -126,15 +128,14 @@ async def task_send_emails(emailq: Queue):
             continue
 
         address, subject, body = emailq.get()
-        send_email(address, subject, body)
+
+        # send email in a different thread so we don't block the general emailer loop here
+        await asyncio.to_thread(send_email, address, subject, body)
+
         sent += 1
-
-        # let other tasks run
-        await asyncio.sleep(0)
-
         if sent >= int(CFG_DICT["task_send_emails_max"]):
-            sent = 0
             logging.warning(f"sent {sent} emails (max), waiting before sending more")
+            sent = 0
             await asyncio.sleep(int(CFG_DICT["task_send_emails_loop_sleep"]))
 
 
