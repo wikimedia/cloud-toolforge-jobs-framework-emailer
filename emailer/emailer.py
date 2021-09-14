@@ -101,7 +101,8 @@ def send_email(to_addr: str, subject: str, body: str):
         return
 
     try:
-        smtp = smtplib.SMTP_SSL(server, port)
+        # TODO: TLS support?
+        smtp = smtplib.SMTP(server, port)
     except Exception as e:
         logging.error(f"unable to contact SMTP server at {server}:{port}: {e}")
         return

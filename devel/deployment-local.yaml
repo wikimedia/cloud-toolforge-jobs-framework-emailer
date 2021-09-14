@@ -13,9 +13,9 @@ data:
   "email_to_domain": "toolsbeta.wmflabs.org"
   "email_to_prefix": "toolsbeta"
   "email_from_addr": "root@toolforge.org"
-  "smtp_server_fqdn": "mail.toolforge.org"
-  "smtp_server_port": "465"
-  "send_emails_for_real": "no"
+  "smtp_server_fqdn": "mail.toolsbeta.wmflabs.org"
+  "smtp_server_port": "25"
+  "send_emails_for_real": "yes"
   "debug": "yes"
 ---
 apiVersion: apps/v1
