@@ -87,4 +87,6 @@ spec:
         - name: emailer
           image: docker-registry.tools.wmflabs.org/toolforge-jobs-framework-emailer:latest
           imagePullPolicy: Always
+          securityContext:
+            runAsUser: 999
 ---

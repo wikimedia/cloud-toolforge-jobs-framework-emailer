@@ -40,4 +40,6 @@ spec:
         - name: emailer
           image: jobs-emailer:latest
           imagePullPolicy: Never
+          securityContext:
+            runAsUser: 999
 ---
