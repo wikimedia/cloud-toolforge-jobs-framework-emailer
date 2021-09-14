@@ -218,6 +218,20 @@ def terminated_generate_msg(emailevents: dict, state: client.V1ContainerStateTer
     return eventmsg
 
 
+def waiting_generate_msg(emailevents: dict, state: client.V1ContainerStateWaiting):
+    eventmsg = "Pod is in waiting state."
+
+    msg = state.message
+    if msg is not None:
+        eventmsg += f" Not running yet with message: {msg}."
+
+    reason = state.reason
+    if reason is not None:
+        eventmsg += f" Reason '{reason}'."
+
+    return eventmsg
+
+
 def process_event(emailevents: dict, event: dict):
     podname = event["object"].metadata.name
     namespace = event["object"].metadata.namespace
@@ -241,11 +255,14 @@ def process_event(emailevents: dict, event: dict):
     # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1ContainerState.md
     running_state = containerstatus.state.running
     terminated_state = containerstatus.state.terminated
+    waiting_state = containerstatus.state.waiting
 
     if running_state is not None:
         eventmsg += running_generate_msg(emailevents, running_state)
     elif terminated_state is not None:
         eventmsg += terminated_generate_msg(emailevents, terminated_state)
+    elif waiting_state is not None:
+        eventmsg += waiting_generate_msg(emailevents, waiting_state)
     else:
         eventmsg += "Unknown container state."
 
@@ -269,6 +286,8 @@ def user_requested_notifications_for_this(event: dict, emails: str):
 
     if emails == "onfailure" and phase == "Failed":
         return True
+
+    # TODO: we may need a special case here to correctly handle some weirdness with cont jobs
 
     # otherwise, we don't know, default to ignore
     return False
