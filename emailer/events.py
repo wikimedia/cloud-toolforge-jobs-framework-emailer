@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Arturo Borrero Gonzalez <aborrero@wikimedia.org>
+# Copyright (C) 2022 Arturo Borrero Gonzalez <aborrero@wikimedia.org>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -16,107 +16,355 @@
 
 import asyncio
 import logging
+import json
 from kubernetes import client, watch
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import Optional, List
 import cfg
-import compose
 
 
-def process_event(emailevents: dict, event: dict):
-    podname = event["object"].metadata.name
-    namespace = event["object"].metadata.namespace
+class JobEmailsConfig(Enum):
+    """Class to represent a Toolforge job email configuration."""
 
-    # TODO: hardcoded labels?
-    username = event["object"].metadata.labels["app.kubernetes.io/created-by"]
-    jobname = event["object"].metadata.labels["app.kubernetes.io/name"]
+    NONE = auto()
+    ONFAILURE = auto()
+    ONFINISH = auto()
+    ALL = auto()
 
-    if emailevents.get(username) is None:
-        emailevents[username] = dict()
+    def __str__(self):
+        """String representation."""
+        return self.name.lower()
 
-    if emailevents[username].get(jobname) is None:
-        emailevents[username][jobname] = []
+    @classmethod
+    def from_event(self, event):
+        """Returns a JobEmailsConfig from a k8s event dictionary."""
+        jobemailsconfig = event["metadata"]["labels"].get("jobs.toolforge.org/emails", "none")
+        if jobemailsconfig == "onfailure":
+            return JobEmailsConfig.ONFAILURE
+        if jobemailsconfig == "onfinish":
+            return JobEmailsConfig.ONFINISH
+        if jobemailsconfig == "all":
+            return JobEmailsConfig.ALL
 
-    eventmsg = compose.event2message(event)
-    emailevents[username][jobname].append(eventmsg)
-    logging.info(
-        f"caching event for user '{username}' in job '{jobname}', pod event '{namespace}/{podname}'"
-    )
-    logging.debug(f"{eventmsg}")
-
-
-def user_requested_notifications_for_this(event: dict, emails: str):
-    if emails == "none":
-        return False
-
-    if emails == "all":
-        return True
-
-    phase = event["object"].status.phase
-    if emails == "onfinish" and phase in ["Succeeded", "Failed"]:
-        return True
-
-    if emails == "onfailure" and phase == "Failed":
-        return True
-
-    # TODO: we may need a special case here to correctly handle some weirdness with cont jobs
-
-    # otherwise, we don't know, default to ignore
-    return False
+        return JobEmailsConfig.NONE
 
 
-def pod_event_is_relevant(event: dict):
-    name = event["object"].metadata.name
-    namespace = event["object"].metadata.namespace
+class JobType(Enum):
+    """Class to represent a Toolforge job type."""
+
+    UNKNOWN = auto()
+    NORMAL = auto()
+    CRONJOB = auto()
+    CONTINUOUS = auto()
+
+    def __str__(self):
+        """String representation."""
+        return self.name.lower()
+
+    @classmethod
+    def from_event(self, event: dict):
+        """Returns a JobType from a k8s event dictionary."""
+        jobtype = event["metadata"]["labels"].get("app.kubernetes.io/component", "none")
+
+        if jobtype == "jobs":
+            return JobType.NORMAL
+        elif jobtype == "cronjobs":
+            return JobType.CRONJOB
+        elif jobtype == "deployments":
+            return JobType.CONTINUOUS
+
+        return JobType.UNKNOWN
+
+
+class ContainerState(Enum):
+    """Class to represent a kubernetes container state."""
+
+    UNKNOWN = auto()
+    RUNNING = auto()
+    TERMINATED = auto()
+    WAITING = auto()
+
+    def __str__(self):
+        """String representation."""
+        return self.name.lower()
+
+
+@dataclass()
+class JobEvent:
+    """Class to represent a Toolforge Kubernetes job event."""
+
+    podname: Optional[str]
+    phase: Optional[str] = None
+    container_state: Optional[ContainerState] = ContainerState.UNKNOWN
+    exit_code: Optional[int] = None
+    start_timestamp: Optional[str] = field(compare=False, default=None)
+    stop_timestamp: Optional[str] = field(compare=False, default=None)
+    reason: Optional[str] = field(compare=False, default=None)
+    message: Optional[str] = field(compare=False, default=None)
+    original_event: dict = field(compare=False, default=None)
+
+    @classmethod
+    def from_event(cls, event: dict):
+        """Builds a JobEvent object from a kubernetes event."""
+        podname = event["metadata"]["name"]
+        phase = event["status"]["phase"]
+
+        # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1ContainerState.md
+        statuses = event["status"].get("containerStatuses", None)
+        if statuses is not None and statuses[0] is not None:
+            containerstatus = statuses[0]
+            running_state = containerstatus["state"].get("running", None)
+            terminated_state = containerstatus["state"].get("terminated", None)
+            waiting_state = containerstatus["state"].get("waiting", None)
+        else:
+            running_state = None
+            terminated_state = None
+            waiting_state = None
+
+        if running_state is not None:
+            start_timestamp = running_state.get("startedAt", None)
+            container_state = ContainerState.RUNNING
+            extra_args = dict(start_timestamp=start_timestamp)
+        elif terminated_state is not None:
+            start = terminated_state.get("startedAt", None)
+            stop = terminated_state.get("finishedAt", None)
+            exit_code = terminated_state.get("exitCode", None)
+            reason = terminated_state.get("reason", None)
+            message = terminated_state.get("message", None)
+            container_state = ContainerState.TERMINATED
+            extra_args = dict(
+                start_timestamp=start,
+                stop_timestamp=stop,
+                exit_code=exit_code,
+                reason=reason,
+                message=message,
+            )
+        elif waiting_state is not None:
+            reason = waiting_state.get("reason", None)
+            message = waiting_state.get("message", None)
+            container_state = ContainerState.WAITING
+            extra_args = dict(
+                reason=reason,
+                message=message,
+            )
+        else:
+            container_state = ContainerState.UNKNOWN
+            extra_args = dict()
+
+        common_args = dict(
+            podname=podname,
+            phase=phase,
+            original_event=event,
+            container_state=container_state,
+        )
+        args = {**common_args, **extra_args}
+
+        return cls(**args)
+
+    def __repr__(self):
+        """String representation."""
+        s = ""
+
+        if self.podname:
+            s += f"Pod '{self.podname}'. "
+
+        if self.phase:
+            s += f"Phase: '{self.phase.lower()}'. "
+
+        if self.container_state:
+            s += f"Container state: '{self.container_state}'. "
+
+        if self.start_timestamp:
+            s += f"Start timestamp {self.start_timestamp}. "
+
+        if self.stop_timestamp:
+            s += f"Finish timestamp {self.stop_timestamp}. "
+
+        if self.exit_code:
+            s += f"Exit code was '{self.exit_code}'. "
+
+        if self.reason:
+            s += f"With reason '{self.reason}'. "
+
+        if self.message:
+            s += f"With message: '{self.message}'. "
+
+        return s
+
+
+class JobEventNotRelevant(Exception):
+    """Exception that indicates that a JobEvent is not relevant."""
+
+
+@dataclass
+class Job:
+    """Class to represent a collection of events related to a particular Toolforge tool."""
+
+    name: str
+    type: JobType
+    emailsconfig: Optional[JobEmailsConfig] = JobEmailsConfig.NONE
+    events: List[JobEvent] = field(init=False, default_factory=list)
+
+    def _relevance_test(self, new_event: JobEvent) -> None:
+        """Evaluates if a new event is worth storing as job event."""
+        if self.emailsconfig == JobEmailsConfig.NONE:
+            raise JobEventNotRelevant(f"job emails config is {self.emailsconfig}")
+
+        if new_event in self.events:
+            raise JobEventNotRelevant("we already have a similar event (duplicated)")
+
+        if new_event.container_state == ContainerState.UNKNOWN and new_event.phase == "Pending":
+            raise JobEventNotRelevant("this event has no meaningful information")
+
+        if self.emailsconfig == JobEmailsConfig.ALL:
+            logging.debug(
+                f"user wants emails about all events on this job, caching event: {new_event}"
+            )
+            return
+
+        if (
+            self.emailsconfig == JobEmailsConfig.ONFINISH
+            and new_event.container_state == ContainerState.TERMINATED
+        ):
+            logging.debug(
+                f"user wants emails about onfinish events on this job, caching event: {new_event}"
+            )
+            return
+
+        if (
+            self.emailsconfig == JobEmailsConfig.ONFAILURE
+            and new_event.container_state == ContainerState.TERMINATED
+            and new_event.exit_code != 0
+        ):
+            logging.debug(
+                f"user wants emails about onfailure events on this job, caching event: {new_event}"
+            )
+            return
+
+        raise JobEventNotRelevant(f"found no reason to track this event: {self.name} {new_event}")
+
+    def add_event(self, event: dict) -> None:
+        """Add an entry to the list of job events."""
+        new_event = JobEvent.from_event(event)
+        self._relevance_test(new_event)
+        self.events.append(new_event)
+
+    def __str__(self):
+        """String representation."""
+        return f"{self.name} ({self.type}) (emails: {self.emailsconfig})"
+
+
+@dataclass
+class UserJobs:
+    """Class to represent all job events produced by an user."""
+
+    username: str
+    jobs: List[Job] = field(init=False, default_factory=list)
+
+    def _get_or_create(self, event: dict) -> Job:
+        """Get a previous cached job from this user or create a new one if none exists."""
+        jobname = event["metadata"]["labels"]["app.kubernetes.io/name"]
+        jobtype = JobType.from_event(event)
+        jobemailsconfig = JobEmailsConfig.from_event(event)
+
+        for job in self.jobs:
+            if job.name == jobname and job.type == jobtype and job.emailsconfig == jobemailsconfig:
+                return job
+
+        new_job = Job(name=jobname, type=jobtype, emailsconfig=jobemailsconfig)
+        return new_job
+
+    def add_event(self, event: dict) -> None:
+        """Add an event to the list of kubernetes job events."""
+        job = self._get_or_create(event)
+        job.add_event(event)
+
+        # we just created this entry
+        if job not in self.jobs:
+            self.jobs.append(job)
+
+
+@dataclass
+class Cache:
+    """Class to represent collected Toolforge Kubernetes job events."""
+
+    cache: List[UserJobs] = field(init=False, default_factory=list)
+
+    def _get_or_create(self, username: str) -> UserJobs:
+        """Get the user job events object from the cache, or create one if it doesn't exists."""
+        for userjobs in self.cache:
+            if userjobs.username == username:
+                return userjobs
+
+        new_userjobs = UserJobs(username)
+        return new_userjobs
+
+    def add_event(self, event: dict) -> None:
+        """Add an event to the cache."""
+        username = event["metadata"]["labels"]["app.kubernetes.io/created-by"]
+        userjobs = self._get_or_create(username)
+        userjobs.add_event(event)
+
+        # we just created this entry
+        if userjobs not in self.cache:
+            self.cache.append(userjobs)
+
+    def delete(self, userjobs_to_delete: UserJobs) -> None:
+        """Delete an UserJobs object from the cache."""
+        for i in range(len(self.cache) - 1, -1, -1):
+            if self.cache[i].username == userjobs_to_delete.username:
+                logging.debug(f"delete cached events for user {userjobs_to_delete.username}")
+                del self.cache[i]
+
+
+def event_early_filter(event: dict, event_type: str) -> None:
+    """Evaluate if a k8s pod event is interesting to the emailer, before any caching routine."""
+    name = event["metadata"]["name"]
+    namespace = event["metadata"]["namespace"]
 
     logging.debug(f"evaluating event relevance for pod '{namespace}/{name}'")
 
     if not namespace.startswith("tool-"):
-        logging.debug(f"ignoring event: not interested in namespace '{namespace}'")
-        return False
+        raise JobEventNotRelevant(f"not interested in in namespace '{namespace}'")
 
     # TODO: hardcoded labels ?
-    # TODO: we need a new label so users can opt-out of receiving notification emails at all
-    labels = event["object"].metadata.labels
+    labels = event["metadata"]["labels"]
     if labels.get("toolforge", "") != "tool":
-        logging.debug("ignoring event: not related to a toolforge tool")
-        return False
+        raise JobEventNotRelevant("not related to a toolforge tool")
 
     if labels.get("app.kubernetes.io/managed-by", "") != "toolforge-jobs-framework":
-        logging.debug("ignoring event: not managed by toolforge-jobs-framework")
-        return False
+        raise JobEventNotRelevant("not managed by toolforge-jobs-framework")
 
     if labels.get("app.kubernetes.io/component", "") not in [
         "jobs",
         "cronjobs",
         "deployments",
     ]:
-        logging.debug("ignoring event: pod not a created by a proper component")
-        return False
+        raise JobEventNotRelevant("not created by a known component")
 
-    event_type = event["type"]
     if event_type != "MODIFIED":
-        logging.debug(f"ignoring event: not MODIFIED type: {event_type}")
-        return False
+        raise JobEventNotRelevant(f"not interested in this type {event_type}")
 
-    if event["object"].metadata.deletion_timestamp is not None:
-        logging.debug("ignoring event: object being deleted")
-        return False
+    if event["metadata"].get("deletion_timestamp", None) is not None:
+        raise JobEventNotRelevant("object being deleted")
 
-    phase = event["object"].status.phase
+    phase = event["status"]["phase"]
     # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase
-    if phase not in ["Running", "Succeeded", "Failed"]:
-        logging.debug(f"ignoring event: pod phase not relevant: {phase}")
-        return False
+    if phase not in ["Pending", "Running", "Succeeded", "Failed"]:
+        raise JobEventNotRelevant(f"pod phase not relevant: {phase}")
 
-    emails = event["object"].metadata.labels.get("jobs.toolforge.org/emails", "none")
-    if not user_requested_notifications_for_this(event, emails):
-        logging.debug(f"ignoring event: per user request, label set to '{emails}'")
-        return False
+    # ignore early some obvious discards by configuration
+    # further filtering is done later when we decode and do the math to calculate if an
+    # event matches the requested config
+    emails = event["metadata"]["labels"].get("jobs.toolforge.org/emails", "none")
+    if emails == "none":
+        raise JobEventNotRelevant("user configuration requested no emails")
 
-    logging.debug("event seems relevant")
-    return True
+    logging.debug("event seems relevant in the early filter")
 
 
-async def task_watch_pods(emailevents: dict):
+async def task_watch_pods(cache: Cache):
     corev1api = client.CoreV1Api()
     w = watch.Watch()
 
@@ -139,8 +387,19 @@ async def task_watch_pods(emailevents: dict):
             resource_version=last_seen_version,
         ):
 
-            if pod_event_is_relevant(event):
-                process_event(emailevents, event)
+            raw_event_dict = event["raw_object"]
+
+            try:
+                event_early_filter(raw_event_dict, event["type"])
+                cache.add_event(raw_event_dict)
+            except KeyError as e:
+                logging.error(f"potential bug while reading the k8s JSON, missing key {e}")
+                logging.error("offending JSON follows:")
+                logging.error(json.dumps(event, sort_keys=True, indent=4))
+                pass
+            except JobEventNotRelevant as e:
+                logging.debug(f"ignoring job event: {e}")
+                pass
 
             last_seen_version = event["object"].metadata.resource_version
             # let other tasks run if they need to

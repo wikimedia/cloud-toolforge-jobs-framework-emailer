@@ -17,24 +17,25 @@
 import asyncio
 import logging
 from queue import Queue
-from kubernetes import client
 import cfg
+from events import Cache, UserJobs
 
 
-def compose_email(user: str, jobs: dict):
-    jobcount = len(jobs)
+def compose_email(userjobs: UserJobs) -> None:
+    jobcount = len(userjobs.jobs)
 
     addr_prefix = cfg.CFG_DICT["email_to_prefix"]
     addr_domain = cfg.CFG_DICT["email_to_domain"]
-    address = f"{addr_prefix}.{user}@{addr_domain}"
-    subject = f"[Toolforge] notification about {jobcount} jobs"
+    address = f"{addr_prefix}.{userjobs.username}@{addr_domain}"
+    subject = f"[Toolforge] notification about {jobcount} job events"
 
     body = "We wanted to notify you about the activity of some jobs in Toolforge.\n"
-    for job in jobs:
-        eventcount = len(jobs[job])
-        body += f"\n* Job '{job}' had {eventcount} events:\n"
-        for event in jobs[job]:
-            body += f"  -- {event}\n"
+    for job in userjobs.jobs:
+        eventcount = len(job.events)
+        body += f"\n* Job '{job.name}' ({job.type}) (emails: {job.emailsconfig}) "
+        body += f"had {eventcount} events:\n"
+        for jobevent in job.events:
+            body += f"  -- {jobevent}\n"
 
     body += "\n\n"
     body += "If you requested 'filelog' for any of the jobs mentioned above, you may find "
@@ -54,15 +55,14 @@ def compose_email(user: str, jobs: dict):
     return address, subject, body
 
 
-async def task_compose_emails(emailevents: dict, emailq: Queue):
+async def task_compose_emails(cache: Cache, emailq: Queue):
     while True:
         logging.debug("task_compose_emails() loop")
-
         before = emailq.qsize()
 
-        for user in list(emailevents):
-            emailq.put(compose_email(user, emailevents[user]))
-            del emailevents[user]
+        for userjobs in cache.cache:
+            emailq.put(compose_email(userjobs))
+            cache.delete(userjobs)
 
         after = emailq.qsize()
         new = after - before
@@ -71,68 +71,3 @@ async def task_compose_emails(emailevents: dict, emailq: Queue):
             logging.info(f"{new} new pending emails in the queue, new total queue size: {after}")
 
         await asyncio.sleep(int(cfg.CFG_DICT["task_compose_emails_loop_sleep"]))
-
-
-def running_generate_msg(state: client.V1ContainerStateRunning):
-    eventmsg = f"It was started at {state.started_at}."
-    return eventmsg
-
-
-def terminated_generate_msg(state: client.V1ContainerStateTerminated):
-    eventmsg = f"It was created at {state.started_at}. "
-
-    finished_at = state.finished_at
-    if finished_at is not None:
-        eventmsg += f"The pod eventually finished at {finished_at}. "
-
-    exit_code = state.exit_code
-    if exit_code is not None:
-        eventmsg += f"The exit code was {exit_code}. "
-
-    reason = state.reason
-    if reason is not None:
-        eventmsg += f"The reason was '{reason}'. "
-
-    message = state.message
-    if message is not None:
-        eventmsg += f"With associated message '{message}'. "
-
-    return eventmsg
-
-
-def waiting_generate_msg(state: client.V1ContainerStateWaiting):
-    eventmsg = "Pod is in waiting state."
-
-    msg = state.message
-    if msg is not None:
-        eventmsg += f" Not running yet with message: {msg}."
-
-    reason = state.reason
-    if reason is not None:
-        eventmsg += f" Reason '{reason}'."
-
-    return eventmsg
-
-
-def event2message(event: dict):
-    podname = event["object"].metadata.name
-    statuses = event["object"].status.container_statuses
-    containerstatus = statuses[0]
-
-    eventmsg = f"Event for pod '{podname}'. "
-
-    # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1ContainerState.md
-    running_state = containerstatus.state.running
-    terminated_state = containerstatus.state.terminated
-    waiting_state = containerstatus.state.waiting
-
-    if running_state is not None:
-        eventmsg += running_generate_msg(running_state)
-    elif terminated_state is not None:
-        eventmsg += terminated_generate_msg(terminated_state)
-    elif waiting_state is not None:
-        eventmsg += waiting_generate_msg(waiting_state)
-    else:
-        eventmsg += "Unknown container state."
-
-    return eventmsg

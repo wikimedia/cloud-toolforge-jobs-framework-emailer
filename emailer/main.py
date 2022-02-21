@@ -22,6 +22,7 @@ import cfg
 import events
 import send
 import compose
+from events import Cache
 
 # Flooding an email server is very easy, so a word on how this works to try avoiding such flood:
 #  1) task_watch_pods(): watch pod events from kubernetes
@@ -39,18 +40,6 @@ import compose
 # several jobs.
 #
 # The emailq queue is just a normal FIFO queue.
-# The 'emailevents' dict has this layout:
-#
-# emailevents = {
-#    "user1": {
-#         "job1": [ "event 1 msg", "event 2 msg"],
-#         "job2": [ "event 1 msg", "event 2 msg"],
-#    }
-#    "user2": {
-#         "job1": [ "event 1 msg", "event 2 msg"],
-#         "job2": [ "event 1 msg", "event 2 msg"],
-#    }
-# }
 
 
 def main():
@@ -61,13 +50,13 @@ def main():
     # TODO: proper auth
     config.load_incluster_config()
 
-    emailevents = {}
+    cache = Cache()
     emailq = Queue()
 
     loop = asyncio.get_event_loop()
     loop.create_task(cfg.task_read_configmap())
-    loop.create_task(events.task_watch_pods(emailevents))
-    loop.create_task(compose.task_compose_emails(emailevents, emailq))
+    loop.create_task(events.task_watch_pods(cache))
+    loop.create_task(compose.task_compose_emails(cache, emailq))
     loop.create_task(send.task_send_emails(emailq))
 
     try:
