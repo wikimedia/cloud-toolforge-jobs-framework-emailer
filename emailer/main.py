@@ -16,7 +16,7 @@
 
 import asyncio
 import logging
-from queue import Queue
+from collections import deque
 from kubernetes import config
 import emailer.cfg as cfg
 import emailer.events as events
@@ -51,7 +51,7 @@ def main():
     config.load_incluster_config()
 
     cache = Cache()
-    emailq = Queue()
+    emailq = deque()
 
     loop = asyncio.get_event_loop()
     loop.create_task(cfg.task_read_configmap())

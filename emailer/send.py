@@ -17,7 +17,7 @@
 import asyncio
 import logging
 import smtplib
-from queue import Queue
+from collections import deque
 import emailer.cfg as cfg
 
 
@@ -53,17 +53,18 @@ def send_email(to_addr: str, subject: str, body: str):
     logging.debug(f"sent email to {to_addr} via {server}:{port}!")
 
 
-async def task_send_emails(emailq: Queue):
+async def task_send_emails(emailq: deque):
     sent = 0
     while True:
         logging.debug("task_send_emails() loop")
-        if emailq.empty():
+        if len(emailq) == 0:
             sent = 0
             logging.info("no emails to send")
             await asyncio.sleep(int(cfg.CFG_DICT["task_send_emails_loop_sleep"]))
             continue
 
-        address, subject, body = emailq.get()
+        # pop left because this is a FIFO queue
+        address, subject, body = emailq.popleft()
 
         # send email in a different thread so we don't block the general emailer loop here
         await asyncio.to_thread(send_email, address, subject, body)

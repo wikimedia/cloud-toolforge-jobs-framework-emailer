@@ -16,7 +16,7 @@
 
 import asyncio
 import logging
-from queue import Queue
+from collections import deque
 import emailer.cfg as cfg
 from emailer.events import Cache, UserJobs
 
@@ -55,16 +55,16 @@ def compose_email(userjobs: UserJobs) -> None:
     return address, subject, body
 
 
-async def task_compose_emails(cache: Cache, emailq: Queue):
+async def task_compose_emails(cache: Cache, emailq: deque):
     while True:
         logging.debug("task_compose_emails() loop")
-        before = emailq.qsize()
+        before = len(emailq)
 
         for userjobs in cache.cache:
-            emailq.put(compose_email(userjobs))
+            emailq.append(compose_email(userjobs))
             cache.delete(userjobs)
 
-        after = emailq.qsize()
+        after = len(emailq)
         new = after - before
 
         if new > 0:
