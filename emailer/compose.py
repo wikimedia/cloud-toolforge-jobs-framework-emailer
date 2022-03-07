@@ -17,8 +17,8 @@
 import asyncio
 import logging
 from queue import Queue
-import cfg
-from events import Cache, UserJobs
+import emailer.cfg as cfg
+from emailer.events import Cache, UserJobs
 
 
 def compose_email(userjobs: UserJobs) -> None:

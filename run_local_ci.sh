@@ -76,6 +76,7 @@ then
 fi
 exit_trap() {
   docker rm -f "${CONT_NAME}"
+  sudo rm -rf ${DOCKER_TMP_DIR}/.tox/*/log
 }
 set -x
 # we update COVERAGE_FILE below so that its avalible in the
@@ -92,6 +93,3 @@ docker run \
     "$@"
 
 
-# some cleanup after a sucessfull run
-sudo rm -rf ${DOCKER_TMP_DIR}/.tox/black/log
-sudo rm -rf ${DOCKER_TMP_DIR}/.tox/flake8/log

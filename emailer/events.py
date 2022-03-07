@@ -21,7 +21,7 @@ from kubernetes import client, watch
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional, List
-import cfg
+import emailer.cfg as cfg
 
 
 class JobEmailsConfig(Enum):

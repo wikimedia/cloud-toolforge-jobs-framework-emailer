@@ -18,7 +18,7 @@ import asyncio
 import logging
 import smtplib
 from queue import Queue
-import cfg
+import emailer.cfg as cfg
 
 
 def send_email(to_addr: str, subject: str, body: str):

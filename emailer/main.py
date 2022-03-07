@@ -18,11 +18,11 @@ import asyncio
 import logging
 from queue import Queue
 from kubernetes import config
-import cfg
-import events
-import send
-import compose
-from events import Cache
+import emailer.cfg as cfg
+import emailer.events as events
+import emailer.send as send
+import emailer.compose as compose
+from emailer.events import Cache
 
 # Flooding an email server is very easy, so a word on how this works to try avoiding such flood:
 #  1) task_watch_pods(): watch pod events from kubernetes
