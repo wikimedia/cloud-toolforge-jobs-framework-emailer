@@ -90,3 +90,8 @@ docker run \
     --volume /"${DOCKER_TMP_DIR}/doc"://src/doc/build:rw \
     "$IMG_NAME" \
     "$@"
+
+
+# some cleanup after a sucessfull run
+sudo rm -rf ${DOCKER_TMP_DIR}/.tox/black/log
+sudo rm -rf ${DOCKER_TMP_DIR}/.tox/flake8/log
