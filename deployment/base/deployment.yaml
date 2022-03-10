@@ -1,0 +1,20 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobs-emailer
+  namespace: jobs-emailer
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: jobs-emailer
+    spec:
+      serviceAccountName: jobs-emailer
+      containers:
+        - name: jobs-emailer
+          image: docker-registry.tools.wmflabs.org/toolforge-jobs-framework-emailer:latest
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 999

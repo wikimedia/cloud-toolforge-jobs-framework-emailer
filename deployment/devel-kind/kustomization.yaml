@@ -1,0 +1,5 @@
+bases:
+- ../base/
+patchesStrategicMerge:
+- deployment-image.yaml
+- configmap.yaml

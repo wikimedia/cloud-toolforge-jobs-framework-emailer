@@ -1,0 +1,15 @@
+---
+# proper image URL override for kind, see
+# https://kind.sigs.k8s.io/docs/user/quick-start/#loading-an-image-into-your-cluster
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobs-emailer
+  namespace: jobs-emailer
+spec:
+  template:
+    spec:
+      containers:
+        - name: jobs-emailer
+          image: jobs-emailer:latest
+          imagePullPolicy: Never
