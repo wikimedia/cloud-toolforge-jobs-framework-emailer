@@ -12,3 +12,5 @@ from emailer.events import (  # noqa: E402,F401
     JobEmailsConfig,
     event_early_filter,
 )
+
+from emailer.compose import Email, compose_email  # noqa: E402,F401

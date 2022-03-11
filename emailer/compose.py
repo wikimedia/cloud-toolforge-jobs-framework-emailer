@@ -35,7 +35,7 @@ class Email:
         """method to generate a message string suitable for smptlib.sendmail()."""
         # headers
         ret = ""
-        ret += f"Subject: {self.subect}\n"
+        ret += f"Subject: {self.subject}\n"
         ret += f"To: {self.to_addr}\n"
         ret += f"From: {self.from_addr}"
 
