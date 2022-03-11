@@ -16,6 +16,8 @@
 
 import asyncio
 import logging
+import traceback
+from typing import List
 from collections import deque
 from kubernetes import config
 import emailer.cfg as cfg
@@ -42,6 +44,40 @@ from emailer.events import Cache
 # The emailq queue is just a normal FIFO queue.
 
 
+async def cancel_all_tasks(tasks: List[asyncio.tasks.Task]) -> None:
+    """This function cancel all alive tasks, so we can gracefully shutdown the event loop."""
+    for task in tasks:
+        if task.done():
+            continue
+
+        task.cancel()
+        await asyncio.sleep(0)
+
+
+async def task_error_check(
+    loop: asyncio.events.AbstractEventLoop, tasks: List[asyncio.tasks.Task]
+) -> None:
+    """This task checks all main program tasks to see if they are alive."""
+    logging.debug("task_error_check()")
+
+    for task in tasks:
+        if task.done():
+            logging.error(f"{task}")
+            try:
+                task.result()
+            except Exception:
+                logging.error(traceback.format_exc())
+
+            await cancel_all_tasks(tasks)
+            logging.warning("cancelled all tasks, bye bye")
+            loop.stop()
+            return
+
+    # everything OK, reschedule myself to check again after some time
+    await asyncio.sleep(60)
+    loop.create_task(task_error_check(loop, tasks))
+
+
 def main():
     cfg.reconfigure_logging()
 
@@ -52,17 +88,25 @@ def main():
 
     cache = Cache()
     emailq = deque()
+    tasks = []
 
     loop = asyncio.get_event_loop()
-    loop.create_task(cfg.task_read_configmap())
-    loop.create_task(events.task_watch_pods(cache))
-    loop.create_task(compose.task_compose_emails(cache, emailq))
-    loop.create_task(send.task_send_emails(emailq))
+
+    # the main program tasks
+    tasks.append(loop.create_task(cfg.task_read_configmap()))
+    tasks.append(loop.create_task(events.task_watch_pods(cache)))
+    tasks.append(loop.create_task(compose.task_compose_emails(cache, emailq)))
+    tasks.append(loop.create_task(send.task_send_emails(emailq)))
+
+    # the task that detects if we should die (if one of the main program tasks died)
+    loop.create_task(task_error_check(loop, tasks))
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        loop.close()
+        pass
+
+    loop.close()
 
 
 if __name__ == "__main__":
