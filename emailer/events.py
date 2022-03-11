@@ -310,12 +310,10 @@ class Cache:
         if userjobs not in self.cache:
             self.cache.append(userjobs)
 
-    def delete(self, userjobs_to_delete: UserJobs) -> None:
-        """Delete an UserJobs object from the cache."""
-        for i in range(len(self.cache) - 1, -1, -1):
-            if self.cache[i].username == userjobs_to_delete.username:
-                logging.debug(f"delete cached events for user {userjobs_to_delete.username}")
-                del self.cache[i]
+    def flush(self) -> None:
+        """Delete the cache."""
+        self.cache.clear()
+        logging.debug("cache flushed")
 
 
 def event_early_filter(event: dict, event_type: str) -> None:

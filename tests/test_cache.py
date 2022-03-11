@@ -33,7 +33,7 @@ def test_cache_delete_one():
     cache.add_event(FakeK8sPodGenerator.new(phase="Running", job_emails=JobEmailsConfig.ALL))
     assert len(cache.cache) == 1
 
-    cache.delete(cache.cache[0])
+    cache.flush()
     assert len(cache.cache) == 0
 
 
@@ -45,28 +45,22 @@ def test_cache_delete_multiple():
         account="tool1", phase="Running", job_emails=JobEmailsConfig.ALL
     )
     cache.add_event(event1)
-    userjob1 = cache.cache[0]
     assert len(cache.cache) == 1
 
     event2 = FakeK8sPodGenerator.new(
         account="tool2", phase="Running", job_emails=JobEmailsConfig.ALL
     )
     cache.add_event(event2)
-    userjob2 = cache.cache[1]
     assert len(cache.cache) == 2
 
     event3 = FakeK8sPodGenerator.new(
         account="tool3", phase="Running", job_emails=JobEmailsConfig.ALL
     )
     cache.add_event(event3)
-    userjob3 = cache.cache[2]
     assert len(cache.cache) == 3
 
-    cache.delete(userjob3)
-    assert len(cache.cache) == 2
-    assert userjob1 in cache.cache
-    assert userjob2 in cache.cache
-    assert userjob3 not in cache.cache
+    cache.flush()
+    assert len(cache.cache) == 0
 
 
 def test_cache_repeated_event():

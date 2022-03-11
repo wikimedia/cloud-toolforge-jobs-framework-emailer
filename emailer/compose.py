@@ -62,12 +62,12 @@ async def task_compose_emails(cache: Cache, emailq: deque):
 
         for userjobs in cache.cache:
             emailq.append(compose_email(userjobs))
-            cache.delete(userjobs)
 
         after = len(emailq)
         new = after - before
 
         if new > 0:
             logging.info(f"{new} new pending emails in the queue, new total queue size: {after}")
+            cache.flush()
 
         await asyncio.sleep(int(cfg.CFG_DICT["task_compose_emails_loop_sleep"]))
