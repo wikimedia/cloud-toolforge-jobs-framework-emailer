@@ -41,5 +41,5 @@ kubectl apply -k deployment/devel-kind
 Once initially deployed, you can quickly iterate on patches/changes using this command line:
 
 ```
-./run-local-ci.sh && docker build --tag jobs-emailer . && kind load docker-image jobs-emailer:latest && kubectl -n jobs-emailer rollout restart deployment/jobs-emailer
+./run_local_ci.sh && docker build --tag jobs-emailer . && kind load docker-image jobs-emailer:latest && kubectl -n jobs-emailer rollout restart deployment/jobs-emailer && watch kubectl -n jobs-emailer get pods
 ```
