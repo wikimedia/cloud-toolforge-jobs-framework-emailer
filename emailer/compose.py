@@ -16,18 +16,43 @@
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from collections import deque
 import emailer.cfg as cfg
 from emailer.events import Cache, UserJobs
 
 
-def compose_email(userjobs: UserJobs) -> None:
+@dataclass(frozen=True)
+class Email:
+    """Class to represent an email."""
+
+    subject: str
+    to_addr: str
+    from_addr: str
+    body: str
+
+    def message(self) -> str:
+        """method to generate a message string suitable for smptlib.sendmail()."""
+        # headers
+        ret = ""
+        ret += f"Subject: {self.subect}\n"
+        ret += f"To: {self.to_addr}\n"
+        ret += f"From: {self.from_addr}"
+
+        # content
+        ret += "\n\n"
+        ret += self.body
+
+        return ret
+
+
+def compose_email(userjobs: UserJobs) -> Email:
     jobcount = len(userjobs.jobs)
 
     addr_prefix = cfg.CFG_DICT["email_to_prefix"]
     addr_domain = cfg.CFG_DICT["email_to_domain"]
     address = f"{addr_prefix}.{userjobs.username}@{addr_domain}"
-    subject = f"[Toolforge] notification about {jobcount} job events"
+    subject = f"[Toolforge] notification about {jobcount} jobs"
 
     body = "We wanted to notify you about the activity of some jobs in Toolforge.\n"
     for job in userjobs.jobs:
@@ -43,8 +68,8 @@ def compose_email(userjobs: UserJobs) -> None:
     body += "Check them from Toolforge bastions as usual.\n"
     body += "\n"
     body += "You are receiving this email because:\n"
-    body += " 1) when the job was created, it was requested to send email notfications\n"
-    body += " 2) you are listed as tool maintainer for this tool\n"
+    body += " 1) when the job was created, it was requested to send email notfications.\n"
+    body += " 2) you are listed as tool maintainer for this tool.\n"
     body += "\n"
     body += "Find help and more information in wikitech: https://wikitech.wikimedia.org/\n"
     body += "\n"
@@ -52,7 +77,9 @@ def compose_email(userjobs: UserJobs) -> None:
 
     # TODO: run the extra mile and include the last few log lines in the email?
 
-    return address, subject, body
+    return Email(
+        from_addr=cfg.CFG_DICT["email_from_addr"], to_addr=address, subject=subject, body=body
+    )
 
 
 async def task_compose_emails(cache: Cache, emailq: deque):

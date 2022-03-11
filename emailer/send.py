@@ -19,17 +19,16 @@ import logging
 import smtplib
 from collections import deque
 import emailer.cfg as cfg
+from emailer.compose import Email
 
 
-def send_email(to_addr: str, subject: str, body: str):
-    from_addr = cfg.CFG_DICT["email_from_addr"]
-
+def send_email(email: Email) -> None:
     server = cfg.CFG_DICT["smtp_server_fqdn"]
     port = cfg.CFG_DICT["smtp_server_port"]
 
-    logging.info(f"Sending email FROM: {from_addr} TO: {to_addr} via {server}:{port}")
-    logging.debug(f"SUBJECT: {subject}")
-    logging.debug(f"BODY: {body}")
+    logging.info(f"Sending email FROM: {email.from_addr} TO: {email.to_addr} via {server}:{port}")
+    logging.debug(f"SUBJECT: {email.subject}")
+    logging.debug(f"BODY: {email.body}")
 
     if cfg.CFG_DICT["send_emails_for_real"] != "yes":
         logging.info("not sending email for real")
@@ -43,14 +42,14 @@ def send_email(to_addr: str, subject: str, body: str):
         return
 
     try:
-        smtp.sendmail(from_addr, to_addr, f"Subject:{subject}\n\n{body}")
+        smtp.sendmail(email.from_addr, email.to_addr, email.message())
     except Exception as e:
         smtp.close()
-        logging.error(f"unable to send email to {to_addr} via {server}:{port}: {e}")
+        logging.error(f"unable to send email to {email.to_addr} via {server}:{port}: {e}")
         return
 
     smtp.close()
-    logging.debug(f"sent email to {to_addr} via {server}:{port}!")
+    logging.debug(f"sent email to {email.to_addr} via {server}:{port}!")
 
 
 async def task_send_emails(emailq: deque):
@@ -64,10 +63,10 @@ async def task_send_emails(emailq: deque):
             continue
 
         # pop left because this is a FIFO queue
-        address, subject, body = emailq.popleft()
+        email = emailq.popleft()
 
         # send email in a different thread so we don't block the general emailer loop here
-        await asyncio.to_thread(send_email, address, subject, body)
+        await asyncio.to_thread(send_email, email)
 
         sent += 1
         if sent >= int(cfg.CFG_DICT["task_send_emails_max"]):
