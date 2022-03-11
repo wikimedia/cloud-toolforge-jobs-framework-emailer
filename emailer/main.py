@@ -29,8 +29,8 @@ from emailer.events import Cache
 # Flooding an email server is very easy, so a word on how this works to try avoiding such flood:
 #  1) task_watch_pods(): watch pod events from kubernetes
 #    * events are filtered out, we only care about certain events
-#    * if a relevant event happens, we extract the info and cache it in the 'emailevents' dict
-#  2) task_compose_emails(): iterate the 'emailevents' dict to compose actual emails and queue them
+#    * if a relevant event happens, we extract the info and cache them
+#  2) task_compose_emails(): iterate the job event cache to compose actual emails and queue them
 #  3) task_send_emails(): every Y seconds, send queued emails, up to a given max
 #  4) we also read a configmap every X seconds, to allow reconfiguration without restarts
 #     which should help reduce the amount of lost emails
