@@ -24,6 +24,79 @@ from typing import Optional, List
 import emailer.cfg as cfg
 
 
+class JobEventNotRelevant(Exception):
+    """Exception that indicates that a JobEvent is not relevant."""
+
+
+class JobEventLabel(Exception):
+    """Exception that indicates that there is a problem with pod lables."""
+
+
+@dataclass(frozen=True)
+class ExpectedLabel:
+    """Class to represent an expected label in a pod object."""
+
+    name: str
+    required: bool
+    values: Optional[List[str]] = None
+
+
+@dataclass(frozen=True)
+class ExpectedLabels:
+    """Class to store all labels we expect/understand from k8s."""
+
+    labels: List[ExpectedLabel]
+
+    def validate(self, pod_labels: dict) -> None:
+        """Method to validate a set of labels."""
+        for label in self.labels:
+            pod_label = pod_labels.get(label.name, None)
+            if label.required and pod_label is None:
+                raise JobEventLabel(f"pod misses required label '{label.name}'")
+
+            if label.values and pod_label not in label.values:
+                raise JobEventLabel(
+                    f"pod has wrong value in '{label.name}'. '{label.values}' vs '{pod_label}'"
+                )
+
+
+EXPECTED_LABELS = ExpectedLabels(
+    labels=[
+        ExpectedLabel(
+            # we don't require this label, default is to don't send emails
+            name="jobs.toolforge.org/emails",
+            required=False,
+        ),
+        ExpectedLabel(
+            # job type
+            name="app.kubernetes.io/component",
+            required=True,
+            values=["jobs", "cronjobs", "deployments"],
+        ),
+        ExpectedLabel(
+            # job name
+            name="app.kubernetes.io/name",
+            required=True,
+        ),
+        ExpectedLabel(
+            # user name (tool account)
+            name="app.kubernetes.io/created-by",
+            required=True,
+        ),
+        ExpectedLabel(
+            name="app.kubernetes.io/managed-by",
+            required=True,
+            values=["toolforge-jobs-framework"],
+        ),
+        ExpectedLabel(
+            name="toolforge",
+            required=True,
+            values=["tool"],
+        ),
+    ]
+)
+
+
 class JobEmailsConfig(Enum):
     """Class to represent a Toolforge job email configuration."""
 
@@ -193,10 +266,6 @@ class JobEvent:
         return s
 
 
-class JobEventNotRelevant(Exception):
-    """Exception that indicates that a JobEvent is not relevant."""
-
-
 @dataclass
 class Job:
     """Class to represent a collection of events related to a particular Toolforge tool."""
@@ -326,21 +395,6 @@ def event_early_filter(event: dict, event_type: str) -> None:
     if not namespace.startswith("tool-"):
         raise JobEventNotRelevant(f"not interested in in namespace '{namespace}'")
 
-    # TODO: hardcoded labels ?
-    labels = event["metadata"]["labels"]
-    if labels.get("toolforge", "") != "tool":
-        raise JobEventNotRelevant("not related to a toolforge tool")
-
-    if labels.get("app.kubernetes.io/managed-by", "") != "toolforge-jobs-framework":
-        raise JobEventNotRelevant("not managed by toolforge-jobs-framework")
-
-    if labels.get("app.kubernetes.io/component", "") not in [
-        "jobs",
-        "cronjobs",
-        "deployments",
-    ]:
-        raise JobEventNotRelevant("not created by a known component")
-
     if event_type != "MODIFIED":
         raise JobEventNotRelevant(f"not interested in this type {event_type}")
 
@@ -355,7 +409,9 @@ def event_early_filter(event: dict, event_type: str) -> None:
     # ignore early some obvious discards by configuration
     # further filtering is done later when we decode and do the math to calculate if an
     # event matches the requested config
-    emails = event["metadata"]["labels"].get("jobs.toolforge.org/emails", "none")
+    labels = event["metadata"]["labels"]
+    EXPECTED_LABELS.validate(labels)
+    emails = labels.get("jobs.toolforge.org/emails", "none")
     if emails == "none":
         raise JobEventNotRelevant("user configuration requested no emails")
 
@@ -396,6 +452,9 @@ async def task_watch_pods(cache: Cache):
                 logging.error(json.dumps(event, sort_keys=True, indent=4))
                 pass
             except JobEventNotRelevant as e:
+                logging.debug(f"ignoring job event: {e}")
+                pass
+            except JobEventLabel as e:
                 logging.debug(f"ignoring job event: {e}")
                 pass
 
