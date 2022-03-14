@@ -13,7 +13,7 @@ data:
   "task_read_configmap_sleep": "10"
   "email_to_domain": "tools.wmflabs.org"
   "email_to_prefix": "tools"
-  "email_from_addr": "root@toolforge.org"
+  "email_from_addr": "noreply@toolforge.org"
   "smtp_server_fqdn": "mail.tools.wmflabs.org"
   "smtp_server_port": "25"
   "send_emails_for_real": "yes"
