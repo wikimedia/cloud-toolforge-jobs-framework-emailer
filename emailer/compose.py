@@ -46,13 +46,23 @@ class Email:
         return ret
 
 
-def compose_email(userjobs: UserJobs) -> Email:
-    jobcount = len(userjobs.jobs)
+def _compose_subject(userjobs: UserJobs) -> str:
+    subject = f"[Toolforge] [{userjobs.username}] notification about "
 
+    jobcount = len(userjobs.jobs)
+    if jobcount == 1:
+        subject += f"job {userjobs.jobs[0].name}"
+    else:
+        subject += f"{jobcount} jobs"
+
+    return subject
+
+
+def compose_email(userjobs: UserJobs) -> Email:
     addr_prefix = cfg.CFG_DICT["email_to_prefix"]
     addr_domain = cfg.CFG_DICT["email_to_domain"]
     address = f"{addr_prefix}.{userjobs.username}@{addr_domain}"
-    subject = f"[Toolforge] notification about {jobcount} jobs"
+    subject = _compose_subject(userjobs)
 
     body = "We wanted to notify you about the activity of some jobs in Toolforge.\n"
     for job in userjobs.jobs:
