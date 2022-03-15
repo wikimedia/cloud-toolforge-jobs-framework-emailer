@@ -58,7 +58,7 @@ async def task_send_emails(emailq: deque):
         logging.debug("task_send_emails() loop")
         if len(emailq) == 0:
             sent = 0
-            logging.info("no emails to send")
+            logging.debug("no emails to send")
             await asyncio.sleep(int(cfg.CFG_DICT["task_send_emails_loop_sleep"]))
             continue
 
