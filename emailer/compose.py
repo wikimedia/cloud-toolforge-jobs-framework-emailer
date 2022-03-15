@@ -64,7 +64,9 @@ def compose_email(userjobs: UserJobs) -> Email:
     address = f"{addr_prefix}.{userjobs.username}@{addr_domain}"
     subject = _compose_subject(userjobs)
 
-    body = "We wanted to notify you about the activity of some jobs in Toolforge.\n"
+    body = "We wanted to notify you about the activity of some jobs "
+    body += f"in the '{userjobs.username}' Toolforge tool.\n"
+
     for job in userjobs.jobs:
         eventcount = len(job.events)
         body += f"\n* Job '{job.name}' ({job.type}) (emails: {job.emailsconfig}) "
