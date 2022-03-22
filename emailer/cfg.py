@@ -27,8 +27,9 @@ CFG_DICT = {
     # process events to compose emails every this many seconds
     # if you pick a big enough number here chances are the system can collapse several emails for
     # a same user together. They will get the email delayed, but there will be fewer emails flying.
-    # The default here is 5 minutes
-    "task_compose_emails_loop_sleep": "300",
+    # Also, a low value could result in duplicated emails about similar events.
+    # The default here is 6.5 minutes
+    "task_compose_emails_loop_sleep": "400",
     # send emails every this many seconds
     "task_send_emails_loop_sleep": "30",
     # every time we send emails, send this many at max

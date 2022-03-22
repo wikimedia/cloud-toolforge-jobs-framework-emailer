@@ -6,7 +6,7 @@ metadata:
   name: jobs-emailer-configmap
   namespace: jobs-emailer
 data:
-  "task_compose_emails_loop_sleep": "300"
+  "task_compose_emails_loop_sleep": "400"
   "task_send_emails_loop_sleep": "1"
   "task_send_emails_max": "2"
   "task_watch_pods_timeout": "60"
