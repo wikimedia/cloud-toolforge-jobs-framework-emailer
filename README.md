@@ -11,7 +11,9 @@ This was created for [Wikimedia Toolforge](https://tolforge.org).
 
 ## Installation
 
-See `deployment/README.md`.
+Per https://phabricator.wikimedia.org/T303931, use `deploy.sh`.
+
+For additional instructions, see `deployment/README.md`.
 
 ## Development
 
