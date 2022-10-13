@@ -83,13 +83,17 @@ def reconfigure(configmap: dict):
 async def task_read_configmap():
     corev1api = client.CoreV1Api()
     last_seen_version = 0
+    # we want to spend 2 seconds at most reading the configmap
+    _request_timeout = 2
 
     while True:
         logging.debug("task_read_configmap() loop")
 
         try:
             configmap = corev1api.read_namespaced_config_map(
-                name=CONFIGMAP_NAME, namespace=CONFIGMAP_NS
+                name=CONFIGMAP_NAME,
+                namespace=CONFIGMAP_NS,
+                _request_timeout=_request_timeout,
             )
         except client.exceptions.ApiException as e:
             logging.warning(
