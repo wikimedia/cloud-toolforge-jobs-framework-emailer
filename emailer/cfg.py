@@ -34,9 +34,6 @@ CFG_DICT = {
     "task_send_emails_loop_sleep": "30",
     # every time we send emails, send this many at max
     "task_send_emails_max": "10",
-    # how long to block watching for pod events
-    # not very important, but may further delay email delivery
-    "task_watch_pods_timeout": "60",
     # how often to read our configmap for reconfiguration
     "task_read_configmap_sleep": "10",
     # the domain emails will go to

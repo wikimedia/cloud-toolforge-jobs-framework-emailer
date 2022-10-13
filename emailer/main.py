@@ -25,6 +25,7 @@ import emailer.events as events
 import emailer.send as send
 import emailer.compose as compose
 from emailer.events import Cache
+from emailer.webserver import webserver_run
 
 # Flooding an email server is very easy, so a word on how this works to try avoiding such flood:
 #  1) task_watch_pods(): watch pod events from kubernetes
@@ -54,9 +55,7 @@ async def cancel_all_tasks(tasks: List[asyncio.tasks.Task]) -> None:
         await asyncio.sleep(0)
 
 
-async def task_error_check(
-    loop: asyncio.events.AbstractEventLoop, tasks: List[asyncio.tasks.Task]
-) -> None:
+async def task_error_check(tasks: List[asyncio.tasks.Task]) -> None:
     """This task checks all main program tasks to see if they are alive."""
     logging.debug("task_error_check()")
 
@@ -70,43 +69,41 @@ async def task_error_check(
 
             await cancel_all_tasks(tasks)
             logging.warning("cancelled all tasks, bye bye")
-            loop.stop()
+            asyncio.get_event_loop().stop()
             return
 
     # everything OK, reschedule myself to check again after some time
     await asyncio.sleep(60)
-    loop.create_task(task_error_check(loop, tasks))
+    asyncio.create_task(task_error_check(tasks))
+
+
+async def _main():
+    cache = Cache()
+    emailq = deque()
+    tasks = []
+
+    # we schedule all emailer tasks + the webserver in the same event loop
+    # so the webserver can reply to liveness probes and kubernetes can detect
+    # if the event loop is somehow stalled
+    tasks.append(asyncio.create_task(cfg.task_read_configmap()))
+    tasks.append(asyncio.create_task(events.task_watch_pods(cache)))
+    tasks.append(asyncio.create_task(compose.task_compose_emails(cache, emailq)))
+    tasks.append(asyncio.create_task(send.task_send_emails(emailq)))
+
+    # the task that detects if we should die (if one of the main program tasks died)
+    asyncio.create_task(task_error_check(tasks))
+
+    await webserver_run()
 
 
 def main():
     cfg.reconfigure_logging()
-
     logging.info("emailer starting!")
 
     # TODO: proper auth
     config.load_incluster_config()
 
-    cache = Cache()
-    emailq = deque()
-    tasks = []
-
-    loop = asyncio.get_event_loop()
-
-    # the main program tasks
-    tasks.append(loop.create_task(cfg.task_read_configmap()))
-    tasks.append(loop.create_task(events.task_watch_pods(cache)))
-    tasks.append(loop.create_task(compose.task_compose_emails(cache, emailq)))
-    tasks.append(loop.create_task(send.task_send_emails(emailq)))
-
-    # the task that detects if we should die (if one of the main program tasks died)
-    loop.create_task(task_error_check(loop, tasks))
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        pass
-
-    loop.close()
+    asyncio.run(_main())
 
 
 if __name__ == "__main__":

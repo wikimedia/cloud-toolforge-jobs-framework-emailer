@@ -21,7 +21,6 @@ from kubernetes import client, watch
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional, List
-import emailer.cfg as cfg
 
 
 class JobEventNotRelevant(Exception):
@@ -419,6 +418,10 @@ def event_early_filter(event: dict, event_type: str) -> None:
 
 
 async def task_watch_pods(cache: Cache):
+    # max seconds we will block waiting for new pod events
+    # increasing this may result in the pod missing liveness probes from k8s
+    timeout_seconds = 2
+
     corev1api = client.CoreV1Api()
     w = watch.Watch()
 
@@ -428,8 +431,8 @@ async def task_watch_pods(cache: Cache):
 
     # this outer loop is in theory not neccesary. But we are using a timeout in the stream watch
     # because if no events happen (unlikely in a real toolforge) then the call will block waiting
-    # for events, preventing the email send routine from executing. The timeout unblocks the call
-    # but then we need to restart it, hence this outer loop
+    # for events, preventing the email send routine from executing (and the webserver). The timeout
+    # unblocks the call but then we need to restart it, hence this outer loop
     while True:
         # let the others routines run if they need to
         await asyncio.sleep(0)
@@ -438,7 +441,7 @@ async def task_watch_pods(cache: Cache):
 
         for event in w.stream(
             corev1api.list_pod_for_all_namespaces,
-            timeout_seconds=int(cfg.CFG_DICT["task_watch_pods_timeout"]),
+            timeout_seconds=timeout_seconds,
             resource_version=last_seen_version,
         ):
 

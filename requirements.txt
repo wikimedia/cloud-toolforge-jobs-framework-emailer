@@ -1,2 +1,3 @@
 asyncio
+aiohttp
 kubernetes==18.20.0

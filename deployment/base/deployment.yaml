@@ -18,3 +18,14 @@ spec:
           imagePullPolicy: Always
           securityContext:
             runAsUser: 999
+          ports:
+            - name: webserver
+              containerPort: 8080
+          livenessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            # 28 seconds is periodSeconds (30) minus 2, meaning: timeout just before the next probe
+            timeoutSeconds: 28
+            httpGet:
+              path: /healthz
+              port: webserver
