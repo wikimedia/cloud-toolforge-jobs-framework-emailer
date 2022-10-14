@@ -431,9 +431,10 @@ async def task_watch_pods(cache: Cache):
     # for events, preventing the email send routine from executing. The timeout unblocks the call
     # but then we need to restart it, hence this outer loop
     while True:
-        logging.debug("task_watch_pods() loop")
         # let the others routines run if they need to
         await asyncio.sleep(0)
+
+        logging.debug("task_watch_pods() loop")
 
         for event in w.stream(
             corev1api.list_pod_for_all_namespaces,
