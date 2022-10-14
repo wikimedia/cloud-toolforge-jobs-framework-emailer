@@ -393,7 +393,7 @@ def event_early_filter(event: dict, event_type: str) -> None:
     logging.debug(f"evaluating event relevance for pod '{namespace}/{name}'")
 
     if not namespace.startswith("tool-"):
-        raise JobEventNotRelevant(f"not interested in in namespace '{namespace}'")
+        raise JobEventNotRelevant(f"not interested in namespace '{namespace}'")
 
     if event_type != "MODIFIED":
         raise JobEventNotRelevant(f"not interested in this type {event_type}")
