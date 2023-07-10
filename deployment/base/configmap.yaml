@@ -1,9 +1,0 @@
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: jobs-emailer-configmap
-  namespace: jobs-emailer
-# override this on kustomize overlays. The software has defaults anyway.
-data:
-  "debug": "yes"

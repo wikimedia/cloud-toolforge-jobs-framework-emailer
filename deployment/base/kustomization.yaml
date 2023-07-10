@@ -1,8 +1,0 @@
-commonLabels:
-  app: jobs-emailer
-  name: jobs-emailer
-resources:
-- namespace.yaml
-- rbac.yaml
-- configmap.yaml
-- deployment.yaml
